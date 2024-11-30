@@ -1,6 +1,7 @@
+use std::{path::PathBuf, process::ExitCode, sync::OnceLock};
+
 use clap::Parser;
 use kanidm_client::{ClientError, KanidmClient, KanidmClientBuilder};
-use std::{path::PathBuf, process::ExitCode, sync::OnceLock};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
