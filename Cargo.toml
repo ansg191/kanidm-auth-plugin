@@ -1,5 +1,6 @@
 [package]
 name = "kanidm-auth-plugin"
+repository = "https://github.com/ansg191/kanidm-auth-plugin"
 version = "0.1.0"
 edition = "2021"
 publish = ["anshulg"]
