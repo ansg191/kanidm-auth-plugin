@@ -1,13 +1,20 @@
 use std::{path::PathBuf, process::ExitCode, sync::OnceLock};
 
+use anyhow::Result;
 use clap::Parser;
-use kanidm_client::{ClientError, KanidmClient, KanidmClientBuilder};
+use serde::Deserialize;
+
+use crate::client::KanidmClient;
+
+mod client;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
     #[arg(short, long)]
     config: Option<PathBuf>,
+    #[arg(short, long)]
+    verbose: bool,
 
     #[arg(name = "USERNAME", required = true)]
     username: String,
@@ -16,10 +23,9 @@ struct Args {
     password: Option<String>,
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     let args = Args::parse();
-    let client = match get_client(&args) {
+    let mut client = match get_client(&args) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Failed to create client: {e:?}");
@@ -29,15 +35,12 @@ async fn main() -> ExitCode {
 
     let password = args.password.unwrap_or_else(get_password);
 
-    if let Err(e) = client.auth_anonymous().await {
+    if let Err(e) = client.auth_anonymous() {
         eprintln!("Failed to authenticate: {e:?}");
         return ExitCode::FAILURE;
     }
 
-    let token = match client
-        .idm_account_unix_cred_verify(&args.username, &password)
-        .await
-    {
+    let token = match client.idm_account_unix_cred_verify(&args.username, &password) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("Failed to get token: {e:?}");
@@ -45,7 +48,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    if token.is_some() {
+    if token.is_some_and(|t| t.valid) {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -67,18 +70,59 @@ fn config_paths() -> &'static [&'static str] {
     })
 }
 
-fn get_client(args: &Args) -> Result<KanidmClient, ClientError> {
-    let mut builder = KanidmClientBuilder::new();
-
+fn get_client(args: &Args) -> Result<KanidmClient> {
+    let mut contents = None;
     if let Some(cfg_path) = &args.config {
-        builder = builder.read_options_from_optional_config(cfg_path)?;
+        match std::fs::read_to_string(cfg_path) {
+            Ok(s) => {
+                if args.verbose {
+                    eprintln!(
+                        "Using config file {cfg_path:?} (from {cfg_path:?} only)",
+                        cfg_path = cfg_path
+                    );
+                }
+                contents = Some(s)
+            }
+            Err(e) => {
+                if args.verbose {
+                    eprintln!("Failed to read config file {cfg_path:?}: {e:?}")
+                }
+            }
+        }
     } else {
         for path in config_paths() {
-            builder = builder.read_options_from_optional_config(path)?;
+            match std::fs::read_to_string(path) {
+                Ok(s) => {
+                    if args.verbose {
+                        eprintln!(
+                            "Using config file {path:?} (from {paths:?})",
+                            path = path,
+                            paths = config_paths()
+                        );
+                    }
+                    contents = Some(s)
+                }
+                Err(e) => {
+                    if args.verbose {
+                        eprintln!("Failed to read config file {path:?}: {e:?}")
+                    }
+                }
+            }
         }
     }
 
-    builder.build()
+    if let Some(contents) = contents {
+        let config: ClientConfig = toml::from_str(&contents)?;
+        Ok(KanidmClient::new(config.uri))
+    } else {
+        eprintln!("Failed to find config file");
+        Err(anyhow::anyhow!("Failed to find config file"))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ClientConfig {
+    pub uri: String,
 }
 
 fn get_password() -> String {

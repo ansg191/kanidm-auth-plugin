@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.93"
 clap = { version = "4.5.21", features = ["derive"] }
-kanidm_client = "1.4.3"
+http = "1.1.0"
 rpassword = "7.3.1"
-tokio = { version = "1.41.1", features = ["rt"] }
+serde = { version = "1.0.215", features = ["derive"] }
+thiserror = "2.0.3"
+toml = "0.8.19"
+ureq = { version = "3.0.0-rc2", features = ["platform-verifier"] }
