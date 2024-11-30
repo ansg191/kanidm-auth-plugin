@@ -2,7 +2,7 @@
 name = "kanidm-auth-plugin"
 version = "0.1.0"
 edition = "2021"
-publish = false
+publish = ["anshulg"]
 
 [dependencies]
 anyhow = "1.0.93"
